@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Masonry Image Gallery</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,400;0,700;1,400&family=Montserrat:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Tailwind gray-100 */
+            cursor: none; /* Initially hide default system cursor, JS will manage */
+        }
+        /* Custom scrollbar for webkit browsers (optional) */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        /* Ensure break-inside-avoid-column is applied */
+        .gallery-item {
+            break-inside: avoid-column;
+            -webkit-column-break-inside: avoid; /* Safari/Chrome */
+            page-break-inside: avoid; /* Firefox */
+        }
+
+        /* Custom Blob Cursor Styles */
+        #customCursor {
+            position: fixed;
+            width: 25px; /* Initial size of the blob */
+            height: 25px;
+            background-color: rgba(107, 114, 128, 0.6); /* Gray, semi-transparent (Tailwind gray-500) */
+            border-radius: 50%;
+            pointer-events: none; /* Allows clicks to pass through to elements underneath */
+            transform: translate(-50%, -50%); /* Centers the blob on the cursor's actual position */
+            transition: width 0.2s ease-out, height 0.2s ease-out, opacity 0.2s ease-out, background-color 0.2s ease-out;
+            z-index: 9999; /* Ensures it's on top of other elements */
+            opacity: 0; /* Default opacity, .active class makes it visible */
+            display: block; /* Default display, :not(.active) will hide it */
+            will-change: transform, width, height, opacity; /* Performance hint for animations */
+        }
+
+        #customCursor.active {
+            opacity: 1; /* Make cursor visible */
+            display: block; /* Ensure it's block when active */
+        }
+
+        /* Forcefully hide custom cursor when not active */
+        #customCursor:not(.active) {
+            display: none !important;
+        }
+
+        #customCursor.dissipate {
+            width: 8px;  /* Smaller size when "dissipated" */
+            height: 8px;
+            opacity: 0.3 !important; /* Ensure dissipate opacity takes precedence if active */
+            background-color: rgba(107, 114, 128, 0.5); /* Gray, more transparent */
+        }
+
+        /* Styling for the image mask - Tailwind handles most via classes in JS */
+        .image-mask {
+            /* Base styles are applied via Tailwind classes directly in JS */
+        }
+
+        /* Ensure buttons and links show system pointer cursor when body cursor is 'auto' or 'default' */
+        button, a, [role="button"], input[type="submit"], input[type="button"] {
+            cursor: pointer !important;
+        }
+
+        /* Headings - Montserrat */
+        h1, h2, h3, h4, h5, h6 {
+            font-family: 'Montserrat', sans-serif;
+            font-weight: 700; /* Use the bold weight we imported */
+            margin-top: 1.5em;
+            margin-bottom: 0.5em;
+            /* Add other heading styles here */
+        }
+
+        p {
+            font-family: 'Merriweather', serif;
+            margin-bottom: 1em;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div id="customCursor"></div>
+
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <h1 class="text-3xl sm:text-4xl font-bold text-center text-gray-800 mb-8 sm:mb-12">My Gallery</h1>
+        <p></p>
+
+        <div id="galleryContainer" class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4">
+            </div>
+    </div>
+
+    <div id="imageModal" class="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4 hidden transition-opacity duration-300 ease-in-out opacity-0 pointer-events-none">
+        <div id="modalContentContainer" class="bg-white p-4 sm:p-5 shadow-2xl relative max-w-4xl w-full transform transition-all duration-300 ease-in-out scale-95 opacity-0">
+            <button id="closeModalButton" class="absolute top-1 right-1 text-gray-600 hover:text-gray-900 p-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors" aria-label="Close modal">
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <img id="modalImage" src="" alt="Popup image" class="block w-auto h-auto max-w-full max-h-[80vh] mx-auto object-contain mt-8 sm:mt-6">
+            <p id="modalCaption" class="text-center mt-3 text-sm sm:text-base text-gray-600"></p>
+        </div>
+    </div>
+
+    <script src="image_list.js"></script>
+    <script>
+        const galleryContainer = document.getElementById('galleryContainer');
+        const imageModal = document.getElementById('imageModal');
+        const modalContentContainer = document.getElementById('modalContentContainer'); 
+        const modalImage = document.getElementById('modalImage'); 
+        const modalCaption = document.getElementById('modalCaption');
+        const closeModalButton = document.getElementById('closeModalButton');
+        const customCursor = document.getElementById('customCursor'); 
+
+        // --- Mobile Detection ---
+        function isMobileDevice() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                   (navigator.maxTouchPoints && navigator.maxTouchPoints > 2) ||
+                   window.matchMedia("(max-width: 768px)").matches;
+        }
+
+        // --- Custom Cursor Logic ---
+        if (customCursor && !isMobileDevice()) {
+            document.addEventListener('mousemove', (e) => {
+                // Only move if active, to prevent potential small jump when re-activating
+                if (customCursor.classList.contains('active')) {
+                    customCursor.style.left = e.clientX + 'px';
+                    customCursor.style.top = e.clientY + 'px';
+                }
+            });
+            // Activate cursor after a brief moment, ensuring it's ready
+            setTimeout(() => {
+                 customCursor.classList.add('active');
+                 // Initial position update by simulating a mousemove
+                 // This ensures it's positioned correctly from the start if mouse is already on page
+                 const initialMouseEvent = new MouseEvent('mousemove', { clientX: 0, clientY: 0 });
+                 document.dispatchEvent(initialMouseEvent);
+            }, 50);
+        } else if (isMobileDevice()) {
+            // On mobile devices, restore default cursor behavior
+            document.body.style.cursor = 'auto';
+        }
+
+        // Function to create and append gallery items
+        function populateGallery() {
+            images.forEach(image => {
+                const galleryItemDiv = document.createElement('div');
+                galleryItemDiv.className = 'gallery-item mb-4 group relative overflow-hidden'; 
+
+                const imgElement = document.createElement('img');
+                imgElement.src = image.src;
+                imgElement.alt = image.alt;
+                imgElement.className = 'w-full h-auto object-cover align-bottom shadow-md group-hover:shadow-xl transition-all duration-500 transform group-hover:scale-105'; 
+                
+                imgElement.onerror = function() {
+                    this.onerror=null; 
+                    this.src='https://placehold.co/300x200/FF0000/FFFFFF?text=Error+Loading';
+                    this.alt='Image failed to load';
+                    console.error("Failed to load image:", image.src);
+                };
+
+                const maskElement = document.createElement('div');
+                maskElement.className = 'image-mask absolute inset-0 bg-gray-700 bg-opacity-0 group-hover:bg-opacity-20 transition-opacity duration-700 ease-in-out pointer-events-none';
+
+                if (customCursor && !isMobileDevice()) {
+                    galleryItemDiv.addEventListener('mouseenter', () => {
+                        if (customCursor.classList.contains('active')) {
+                            customCursor.classList.add('dissipate');
+                        }
+                    });
+                    galleryItemDiv.addEventListener('mouseleave', () => {
+                        customCursor.classList.remove('dissipate');
+                    });
+                }
+
+                galleryItemDiv.appendChild(imgElement);
+                galleryItemDiv.appendChild(maskElement); 
+                galleryContainer.appendChild(galleryItemDiv);
+
+                imgElement.addEventListener('click', () => {
+                    openModal(image.src, image.alt);
+                });
+            });
+        }
+
+        function openModal(src, alt) {
+            modalImage.src = src;
+            modalImage.alt = alt;
+            modalCaption.textContent = alt;
+
+            imageModal.classList.remove('hidden');
+            void imageModal.offsetWidth; 
+
+            imageModal.classList.remove('opacity-0', 'pointer-events-none');
+            modalContentContainer.classList.remove('scale-95', 'opacity-0');
+            modalContentContainer.classList.add('scale-100', 'opacity-100');
+            
+            document.body.style.overflow = 'hidden'; 
+            document.body.style.cursor = 'auto'; // Restore system cursor behavior
+            if(customCursor && !isMobileDevice()) {
+                customCursor.classList.remove('active'); // This will trigger display:none via CSS
+                customCursor.classList.remove('dissipate'); // Clean up dissipate state
+            }
+        }
+
+        function closeModal() {
+            modalContentContainer.classList.add('scale-95', 'opacity-0');
+            modalContentContainer.classList.remove('scale-100', 'opacity-100');
+            imageModal.classList.add('opacity-0');
+
+            setTimeout(() => {
+                imageModal.classList.add('hidden', 'pointer-events-none');
+            }, 300); 
+            document.body.style.overflow = ''; 
+            // Only re-enable custom cursor on non-mobile devices
+            if (!isMobileDevice()) {
+                document.body.style.cursor = 'none'; // Re-hide system cursor for custom blob
+                if(customCursor) {
+                    setTimeout(() => {
+                        customCursor.classList.add('active');
+                        customCursor.classList.remove('dissipate');
+                    }, 50);
+                }
+            } else {
+                document.body.style.cursor = 'auto'; // Keep default cursor on mobile
+            }
+        }
+
+        closeModalButton.addEventListener('click', closeModal);
+        imageModal.addEventListener('click', (event) => {
+            if (event.target === imageModal) { 
+                closeModal();
+            }
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !imageModal.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', populateGallery);
+    </script>
+
+</body>
+</html>
