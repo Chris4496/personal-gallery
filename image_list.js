@@ -1,4 +1,7 @@
 // Image list for the gallery
+
+// The usally image directory is images/:file
+// But here we utilize the Netlify CDN, the api is integrated with the url, .netlify/images?url=/images/:file
 const images = [
     { src: ".netlify/images?url=/images/_DSC3356.jpg", alt: "_DSC3356" },
     { src: ".netlify/images?url=/images/_DSC3993.jpg", alt: "_DSC3993" },
