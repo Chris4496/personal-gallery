@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import Image from 'next/image'
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
-import { Loader2, ArrowLeft } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { Merriweather } from 'next/font/google'
 
 const merriweather = Merriweather({ weight: ['400', '700'], subsets: ['latin'] })
